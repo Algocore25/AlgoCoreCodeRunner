@@ -1,0 +1,49 @@
+name: Trigger auto deployment for algocore-runner
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ main ]
+    paths:
+    - '**'
+    - '.github/workflows/algocore-runner-AutoDeployTrigger-98fd307a-5946-4cce-a537-5e6ed0e65d43.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write #This is required for requesting the OIDC JWT Token
+      contents: read #Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.ALGOCORERUNNER_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.ALGOCORERUNNER_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.ALGOCORERUNNER_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          _targetLabelKey_: _targetLabel_
+          registryUrl: docker.io
+          registryUsername: ${{ secrets.ALGOCORERUNNER_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.ALGOCORERUNNER_REGISTRY_PASSWORD }}
+          containerAppName: algocore-runner
+          resourceGroup: algocore
+          imageToBuild: algocore25/algocore-runner:${{ github.sha }}
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
