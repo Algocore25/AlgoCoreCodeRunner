@@ -13,6 +13,9 @@ const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || 3000;
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '10mb' }));
 
+// Serve frontend dashboard correctly
+app.use(express.static("public"));
+
 // Ensure temp directory exists
 const ensureTempDir = () => {
   if (!fs.existsSync('temp')) {
@@ -100,10 +103,10 @@ const runCode = (language, code, input, id) => {
       case "sqlite":
         file = `${dir}/main.sql`;
         // For SQL, we need to handle the input differently
-        let sqlCode = code;
+        let sqlCode = `.headers on\n.mode list\n.separator "|"\n${code}`;
         if (input) {
           // If input is provided, treat it as additional SQL commands
-          sqlCode = `${code}\n${input}`;
+          sqlCode = `${sqlCode}\n${input}`;
         }
         fs.writeFileSync(file, sqlCode);
         cmd = `cd ${dir} && sqlite3 main.db < main.sql`;
@@ -129,11 +132,18 @@ const runCode = (language, code, input, id) => {
           console.error('Cleanup error:', cleanupError);
         }
 
+        const errStr = stderr || (error && error.message) || "";
+        const outStr = stdout || "";
         resolve({
-          stdout: stdout || "",
-          stderr: stderr || (error && error.message) || "",
+          stdout: outStr,
+          stderr: errStr,
+          output: outStr ? outStr : errStr,
           code: error ? 1 : 0,
-          executionTime: executionTime,
+          cpuTime: executionTime,
+          memory: 0,
+          signal: error ? error.signal : null,
+          timeout: error && (error.killed || executionTime >= 10000),
+          statusId: error ? (error.killed ? 5 : 6) : 3, // 3: Accepted, 5: Timeout, 6: Compilation/Runtime Error
           language: language
         });
       });

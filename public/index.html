@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoCore Code Runner</title>
+    <!-- Use Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --primary: #6366f1;
+            --secondary: #a855f7;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: hidden;
+            /* Premium dark gradient aesthetic */
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.15), transparent 25%);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            padding: 2rem;
+            z-index: 10;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 3rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: floatIn 1s ease-out forwards;
+        }
+
+        .title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(135deg, #fff, #c4b5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-align: center;
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .options-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        select {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        select:focus {
+            border-color: var(--primary);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+
+        .editor-container, .output-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding-left: 0.5rem;
+        }
+
+        .code-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            color: #e2e8f0;
+            flex-grow: 1;
+            min-height: 250px;
+            transition: border-color 0.3s;
+        }
+
+        .code-box:focus-within {
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            color: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            resize: none;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .output-box {
+            background: rgba(15, 23, 42, 0.4);
+            white-space: pre-wrap;
+            overflow-y: auto;
+            color: #4ade80;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 1.2rem 2rem;
+            border-radius: 999px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 2rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-family: 'Outfit', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: wait;
+            transform: none;
+        }
+
+        .status-text {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            min-height: 20px;
+        }
+
+        @keyframes floatIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Subtle glow animation for the run button */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(99, 102, 241, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="glass-card">
+            <h1 class="title">AlgoCore Code Runner</h1>
+            <p class="subtitle">Secure, high-performance containerized execution</p>
+
+            <div class="options-row">
+                <select id="langaugeSelect" onchange="updateSnippet()">
+                    <option value="python">Python 3</option>
+                    <option value="javascript">JavaScript (Node.js)</option>
+                    <option value="java">Java 17</option>
+                    <option value="cpp">C++ (GCC)</option>
+                    <option value="c">C (GCC)</option>
+                    <option value="sql">SQLite</option>
+                </select>
+            </div>
+
+            <div class="grid">
+                <div class="editor-container">
+                    <span class="label">Source Code</span>
+                    <div class="code-box">
+                        <textarea id="sourceCode" spellcheck="false" placeholder="Write your code here...">print("Welcome to AlgoCore!")&#13;&#10;print("This executes directly via Azure Container Apps.")</textarea>
+                    </div>
+                </div>
+                
+                <div class="output-container">
+                    <span class="label">Execution Output</span>
+                    <div class="code-box output-box" id="output">
+                        // Output will appear here...
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" id="runBtn" onclick="executeCode()">Run Execution</button>
+            <div class="status-text" id="status">System Online & Ready</div>
+        </div>
+    </div>
+
+    <script>
+        const snippets = {
+            python: 'print("Welcome to AlgoCore!")\nprint("Executing highly secure Python on Azure...")',
+            javascript: 'console.log("Welcome to AlgoCore!");\nconsole.log(`Node.js version: ${process.version}`);',
+            java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Welcome to AlgoCore Java Runner!");\n    }\n}',
+            cpp: '#include <iostream>\n\nint main() {\n    std::cout << "Welcome to AlgoCore C++!" << std::endl;\n    return 0;\n}',
+            c: '#include <stdio.h>\n\nint main() {\n    printf("Welcome to AlgoCore C Engine!\\n");\n    return 0;\n}',
+            sql: 'CREATE TABLE runners (id INT, name TEXT);\nINSERT INTO runners VALUES (1, "AlgoCore Runner");\nSELECT * FROM runners;'
+        };
+
+        function updateSnippet() {
+            const lang = document.getElementById('langaugeSelect').value;
+            document.getElementById('sourceCode').value = snippets[lang];
+            document.getElementById('output').innerText = '// Output will appear here...';
+            document.getElementById('output').style.color = 'var(--text-muted)';
+            document.getElementById('status').innerText = 'Ready';
+        }
+
+        async function executeCode() {
+            const btn = document.getElementById('runBtn');
+            const output = document.getElementById('output');
+            const status = document.getElementById('status');
+            
+            const language = document.getElementById('langaugeSelect').value;
+            const sourceCode = document.getElementById('sourceCode').value;
+
+            // UI Loading state
+            btn.disabled = true;
+            btn.innerText = 'Connecting to Engine...';
+            output.innerText = 'Processing...';
+            output.style.color = '#94a3b8';
+            status.innerText = 'Transmitting data to Azure...';
+
+            try {
+                const startTime = performance.now();
+                const response = await fetch('/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language, sourceCode })
+                });
+
+                const data = await response.json();
+                const serverTime = Math.round(performance.now() - startTime);
+                
+                if(data.success || data.run) {
+                    // Check if it's an error code
+                    const isError = data.run.code !== 0;
+                    output.style.color = isError ? '#f87171' : '#4ade80';
+                    output.innerText = data.run.output || (isError ? 'Execution Error' : 'Success (No Output)');
+                    
+                    status.innerText = `Process finished with exit code ${data.run.code} in ${serverTime}ms (CPU: ${data.run.cpuTime}ms)`;
+                } else {
+                    output.style.color = '#f87171';
+                    output.innerText = data.error || 'Unknown Server Error';
+                    status.innerText = 'Internal Error';
+                }
+            } catch (err) {
+                output.style.color = '#f87171';
+                output.innerText = err.message;
+                status.innerText = 'Network/API Connection Error';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Run Execution';
+            }
+        }
+    </script>
+</body>
+</html>
