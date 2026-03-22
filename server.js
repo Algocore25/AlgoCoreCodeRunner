@@ -131,7 +131,7 @@ const runCode = (language, code, input, id) => {
 
         resolve({
           stdout: stdout || "",
-          stderr: stderr || error?.message || "",
+          stderr: stderr || (error && error.message) || "",
           code: error ? 1 : 0,
           executionTime: executionTime,
           language: language
