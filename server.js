@@ -6,7 +6,7 @@ import { v4 as uuid } from "uuid";
 import path from "path";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || 3000;
 
 
 // Enable CORS for all origins
