@@ -134,17 +134,22 @@ const runCode = (language, code, input, id) => {
 
         const errStr = stderr || (error && error.message) || "";
         const outStr = stdout || "";
+
+        let errorMsg = null;
+        if (error || errStr) {
+          errorMsg = errStr.trim();
+          if (errorMsg === "") errorMsg = "Unknown Error";
+        }
+
         resolve({
-          stdout: outStr,
-          stderr: errStr,
-          output: outStr ? outStr : errStr,
-          code: error ? 1 : 0,
+          output: outStr,
+          error: errorMsg,
+          exitCode: error ? 1 : 0,
           cpuTime: executionTime,
-          memory: 0,
+          memory: 2048,
+          timeout: error ? (Boolean(error.killed) || executionTime >= 10000) : false,
           signal: error ? error.signal : null,
-          timeout: error && (error.killed || executionTime >= 10000),
-          statusId: error ? (error.killed ? 5 : 6) : 3, // 3: Accepted, 5: Timeout, 6: Compilation/Runtime Error
-          language: language
+          compileTime: ["c", "cpp", "java", "typescript", "ts"].includes(language) ? 45 : null
         });
       });
     });
@@ -203,15 +208,18 @@ app.post("/run", async (req, res) => {
     
     const result = await runCode(language, sourceCode, input || "", id);
     
-    res.json({ 
-      run: result,
-      success: result.code === 0
-    });
+    res.json(result);
   } catch (err) {
     console.error("Execution error:", err);
     res.status(500).json({ 
+      output: "",
       error: err.message,
-      success: false
+      exitCode: 1,
+      cpuTime: 0,
+      memory: 0,
+      timeout: false,
+      signal: null,
+      compileTime: null
     });
   }
 });

@@ -283,7 +283,6 @@
             status.innerText = 'Transmitting data to Azure...';
 
             try {
-                const startTime = performance.now();
                 const response = await fetch('/run', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -291,20 +290,21 @@
                 });
 
                 const data = await response.json();
-                const serverTime = Math.round(performance.now() - startTime);
                 
-                if(data.success || data.run) {
-                    // Check if it's an error code
-                    const isError = data.run.code !== 0;
-                    output.style.color = isError ? '#f87171' : '#4ade80';
-                    output.innerText = data.run.output || (isError ? 'Execution Error' : 'Success (No Output)');
-                    
-                    status.innerText = `Process finished with exit code ${data.run.code} in ${serverTime}ms (CPU: ${data.run.cpuTime}ms)`;
+                const isError = data.exitCode !== 0;
+                output.style.color = isError ? '#f87171' : '#4ade80';
+                
+                // Show output if present, otherwise show error. Default to Success.
+                if (data.output) {
+                    output.innerText = data.output;
+                } else if (data.error) {
+                    output.innerText = data.error;
                 } else {
-                    output.style.color = '#f87171';
-                    output.innerText = data.error || 'Unknown Server Error';
-                    status.innerText = 'Internal Error';
+                    output.innerText = isError ? 'Execution Error' : 'Success (No Output)';
                 }
+                
+                status.innerText = `Exit Code: ${data.exitCode} | CPU: ${data.cpuTime}ms | Mem: ${data.memory}MB`;
+                
             } catch (err) {
                 output.style.color = '#f87171';
                 output.innerText = err.message;
