@@ -48,9 +48,8 @@ jobs:
         creds: ${{ secrets.AZURE_RBAC_CREDENTIALS }}
 
     - name: 'Docker Login'
-      uses: azure/docker-login@v1
+      uses: docker/login-action@v3
       with:
-        login-server: ${{ env.LOGIN_SERVER }}
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
@@ -62,12 +61,15 @@ jobs:
         docker build . -t ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
         docker push ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
 
-    - name: 'Run Azure Functions Container Action'
-      uses: Azure/functions-container-action@v1
-      id: fa
+    - name: 'Update Azure Container App'
+      uses: azure/cli@v2
       with:
-        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
-        image: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
+        azcliversion: latest
+        inlineScript: |
+          az containerapp update \
+            --name ${{ env.AZURE_FUNCTIONAPP_NAME }} \
+            --resource-group algocore \
+            --image ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${{ env.TAG }}
 
     # If you want to display or use the functionapp url, then uncomment the task below
     #- name: 'Published functionapp url'
