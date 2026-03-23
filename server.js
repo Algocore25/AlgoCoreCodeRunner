@@ -24,13 +24,27 @@ const ensureTempDir = () => {
 };
 
 const runCode = (language, code, input, id) => {
+  // Language number mapping
+  const LANGUAGE_MAP = {
+    1: "c",
+    2: "cpp", 
+    3: "java",
+    4: "python",
+    5: "javascript",
+    6: "typescript",
+    7: "sql"
+  };
+
+  // Convert number to language string
+  const languageStr = LANGUAGE_MAP[language] || language;
+  
   const dir = `temp/${id}`;
   fs.mkdirSync(dir, { recursive: true });
 
   let file, cmd;
 
   try {
-    switch (language) {
+    switch (languageStr) {
       case "python":
         file = `${dir}/main.py`;
         fs.writeFileSync(file, code);
@@ -103,7 +117,7 @@ const runCode = (language, code, input, id) => {
       case "sqlite":
         file = `${dir}/main.sql`;
         // For SQL, we need to handle the input differently
-        let sqlCode = `.headers on\n.mode list\n.separator "|"\n${code}`;
+        let sqlCode = `.headers on\n.mode json\n${code}`;
         if (input) {
           // If input is provided, treat it as additional SQL commands
           sqlCode = `${sqlCode}\n${input}`;
@@ -127,7 +141,11 @@ const runCode = (language, code, input, id) => {
 
         // Clean up temp directory
         try {
-          fs.rmSync(dir, { recursive: true, force: true });
+          if (fs.rmSync) {
+            fs.rmSync(dir, { recursive: true, force: true });
+          } else {
+            fs.rmdirSync(dir, { recursive: true });
+          }
         } catch (cleanupError) {
           console.error('Cleanup error:', cleanupError);
         }
@@ -149,14 +167,18 @@ const runCode = (language, code, input, id) => {
           memory: 2048,
           timeout: error ? (Boolean(error.killed) || executionTime >= 10000) : false,
           signal: error ? error.signal : null,
-          compileTime: ["c", "cpp", "java", "typescript", "ts"].includes(language) ? 45 : null
+          compileTime: ["c", "cpp", "java", "typescript", "ts"].includes(languageStr) ? 45 : null
         });
       });
     });
   } catch (error) {
     // Clean up on error
     try {
-      fs.rmSync(dir, { recursive: true, force: true });
+      if (fs.rmSync) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } else {
+        fs.rmdirSync(dir, { recursive: true });
+      }
     } catch (cleanupError) {
       console.error('Cleanup error:', cleanupError);
     }
@@ -173,16 +195,16 @@ app.get("/health", (req, res) => {
 app.get("/languages", (req, res) => {
   res.json({
     languages: [
-      { name: "python", extension: "py" },
-      { name: "c", extension: "c" },
-      { name: "cpp", extension: "cpp" },
-      { name: "java", extension: "java" },
-      { name: "javascript", extension: "js" },
-      { name: "js", extension: "js" },
-      { name: "typescript", extension: "ts" },
-      { name: "ts", extension: "ts" },
-      { name: "sql", extension: "sql" },
-      { name: "sqlite", extension: "sql" }
+      { name: "c", extension: "c", number: 1 },
+      { name: "cpp", extension: "cpp", number: 2 },
+      { name: "java", extension: "java", number: 3 },
+      { name: "python", extension: "py", number: 4 },
+      { name: "javascript", extension: "js", number: 5 },
+      { name: "js", extension: "js", number: 5 },
+      { name: "typescript", extension: "ts", number: 6 },
+      { name: "ts", extension: "ts", number: 6 },
+      { name: "sql", extension: "sql", number: 7 },
+      { name: "sqlite", extension: "sql", number: 7 }
     ]
   });
 });
@@ -204,7 +226,20 @@ app.post("/run", async (req, res) => {
     }
 
     const id = uuid();
-    console.log(`Executing ${language} code with ID: ${id}`);
+    
+    // Convert language number to string for logging
+    const LANGUAGE_MAP = {
+      1: "c",
+      2: "cpp", 
+      3: "java",
+      4: "python",
+      5: "javascript",
+      6: "typescript",
+      7: "sql"
+    };
+    
+    const languageStr = LANGUAGE_MAP[language] || language;
+    console.log(`Executing ${languageStr} code (number: ${language}) with ID: ${id}`);
     
     const result = await runCode(language, sourceCode, input || "", id);
     
@@ -233,7 +268,7 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Code Runner Server running on port ${PORT}`);
-  console.log(`📝 Supported languages: Python, C, C++, Java, JavaScript, TypeScript, SQLite`);
+  console.log(`📝 Supported languages: C(1), C++(2), Java(3), Python(4), JavaScript(5), TypeScript(6), SQL(7)`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 CORS enabled for all origins`);
 });
