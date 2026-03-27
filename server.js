@@ -225,8 +225,6 @@ app.post("/run", async (req, res) => {
       return res.status(400).json({ error: "Source code cannot be empty" });
     }
 
-    const id = uuid();
-    
     // Convert language number to string for logging
     const LANGUAGE_MAP = {
       1: "c",
@@ -239,10 +237,39 @@ app.post("/run", async (req, res) => {
     };
     
     const languageStr = LANGUAGE_MAP[language] || language;
-    console.log(`Executing ${languageStr} code (number: ${language}) with ID: ${id}`);
+
+    // Handle multiple test cases if input is an array
+    if (Array.isArray(input)) {
+        console.log(`🚀 Executing ${languageStr} for ${input.length} test cases...`);
+        
+        const results = await Promise.all(input.map(async (testInput, index) => {
+            const id = uuid();
+            console.log(`   - Case #${index + 1}: Running with ID: ${id}`);
+            try {
+                return await runCode(language, sourceCode, testInput || "", id);
+            } catch (err) {
+                console.error(`Execution error for test case ${index}:`, err);
+                return { 
+                    output: "",
+                    error: err.message,
+                    exitCode: 1,
+                    cpuTime: 0,
+                    memory: 0,
+                    timeout: false,
+                    signal: null,
+                    compileTime: null
+                };
+            }
+        }));
+        
+        return res.json({ results });
+    }
+
+    // Single input logic (backward compatibility)
+    const id = uuid();
+    console.log(`🚀 Executing ${languageStr} code with ID: ${id}`);
     
     const result = await runCode(language, sourceCode, input || "", id);
-    
     res.json(result);
   } catch (err) {
     console.error("Execution error:", err);

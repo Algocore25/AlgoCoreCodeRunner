@@ -16,7 +16,7 @@ Content-Type: application/json
 {
   "language": "sqlite" | "sql",
   "sourceCode": "<SQL_COMMANDS>",
-  "input": "<ADDITIONAL_SQL_COMMANDS>" // Optional
+  "input": "<ADDITIONAL_SQL_COMMANDS>" | ["<INPUT_1>", "<INPUT_2>"] // Optional string or array
 }
 ```
 
@@ -26,7 +26,7 @@ Content-Type: application/json
 |-------|------|----------|-------------|
 | `language` | string | Yes | Must be "sqlite" or "sql" |
 | `sourceCode` | string | Yes | Main SQL commands to execute |
-| `input` | string | No | Additional SQL commands (appended to sourceCode) |
+| `input` | string \| array | No | Additional commands. If array, each element is a separate execution. |
 
 ### Supported SQL Commands
 
@@ -94,7 +94,9 @@ ORDER BY order_count DESC;
 ## Output Format
 
 ### Response Structure
+
 ```json
+// Single input response:
 {
   "output": "<JSON_ARRAY>",
   "error": "<ERROR_MESSAGE>" | null,
@@ -104,6 +106,19 @@ ORDER BY order_count DESC;
   "timeout": false | true,
   "signal": "<SIGNAL_NAME>" | null,
   "compileTime": null
+}
+
+// Array input response:
+{
+  "results": [
+    {
+      "output": "<JSON_ARRAY>",
+      "error": null,
+      "exitCode": 0,
+       ...
+    },
+    ...
+  ]
 }
 ```
 
