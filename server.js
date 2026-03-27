@@ -245,6 +245,9 @@ app.post("/run", async (req, res) => {
         const results = await Promise.all(input.map(async (testInput, index) => {
             const id = uuid();
             console.log(`   - Case #${index + 1}: Running with ID: ${id}`);
+            console.log(`   - Input: ${testInput}`);
+            console.log(`   - Source Code: ${sourceCode}`);
+            console.log(`   - Language: ${languageStr}`);
             try {
                 return await runCode(language, sourceCode, testInput || "", id);
             } catch (err) {
