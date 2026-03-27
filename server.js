@@ -17,7 +17,35 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Serve frontend dashboard correctly
 app.use(express.static("public"));
 
-// Ensure temp directory exists
+// Concurrency Queue to prevent resource exhaustion on small containers
+let activeExecutions = 0;
+const MAX_CONCURRENT = 2; // Only 2 concurrent javac/java processes
+const queue = [];
+
+const processQueue = async () => {
+  if (activeExecutions >= MAX_CONCURRENT || queue.length === 0) return;
+  
+  const { task, resolve, reject } = queue.shift();
+  activeExecutions++;
+  
+  try {
+    const result = await task();
+    resolve(result);
+  } catch (err) {
+    reject(err);
+  } finally {
+    activeExecutions--;
+    processQueue();
+  }
+};
+
+const runQueued = (task) => {
+  return new Promise((resolve, reject) => {
+    queue.push({ task, resolve, reject });
+    processQueue();
+  });
+};
+
 const ensureTempDir = () => {
   if (!fs.existsSync('temp')) {
     fs.mkdirSync('temp', { recursive: true });
@@ -300,7 +328,8 @@ app.post("/run", async (req, res) => {
     console.log(`   - Source Code: ${sourceCode}`);
     console.log(`   - Language: ${languageStr}`);
     
-    const result = await runCode(language, sourceCode, input || "", id);
+    // Wrap runCode in the concurrency queue
+    const result = await runQueued(() => runCode(language, sourceCode, input || "", id));
 
     console.log(`   - Output: ${result.output}`);
     console.log(`   - Error: ${result.error}`);
