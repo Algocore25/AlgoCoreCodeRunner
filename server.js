@@ -4,6 +4,7 @@ import { exec } from "child_process";
 import fs from "fs";
 import { v4 as uuid } from "uuid";
 import path from "path";
+import crypto from "crypto";
 
 const app = express();
 const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || 3000;
@@ -19,7 +20,7 @@ app.use(express.static("public"));
 
 // Concurrency Queue to prevent resource exhaustion on small containers
 let activeExecutions = 0;
-const MAX_CONCURRENT = 2; // Only 2 concurrent javac/java processes
+const MAX_CONCURRENT = 1; // Strict limit: 1 execution at a time for very weak containers
 const queue = [];
 
 const processQueue = async () => {
@@ -50,6 +51,13 @@ const ensureTempDir = () => {
   if (!fs.existsSync('temp')) {
     fs.mkdirSync('temp', { recursive: true });
   }
+  if (!fs.existsSync('cache')) {
+    fs.mkdirSync('cache', { recursive: true });
+  }
+};
+
+const getCacheKey = (language, code) => {
+  return crypto.createHash('md5').update(`${language}:${code}`).digest('hex');
 };
 
 const runCode = (language, code, input, id) => {
@@ -180,33 +188,70 @@ const runCode = (language, code, input, id) => {
     };
 
     const execute = async () => {
-      let compileResult = { executionTime: 0 };
+      let compileResult = { executionTime: 0, isFromCache: false };
       let runResult = { stdout: "", stderr: "", executionTime: 0, timeout: false, error: null };
 
-      // Compilation Step
+      // Cache Management
+      const cacheKey = getCacheKey(languageStr, code);
+      const cacheDir = `cache/${cacheKey}`;
+      const hasCache = fs.existsSync(cacheDir);
+
+      // Compilation Step (with caching)
       if (["c", "cpp", "java", "typescript", "ts"].includes(languageStr)) {
-        let compileCmd;
-        switch (languageStr) {
-          case "c": compileCmd = `cd ${dir} && gcc main.c -o main`; break;
-          case "cpp": compileCmd = `cd ${dir} && g++ main.cpp -o main`; break;
-          case "java": compileCmd = `cd ${dir} && javac Main.java`; break;
-          case "typescript":
-          case "ts": compileCmd = `cd ${dir} && tsc main.ts --esModuleInterop --skipLibCheck`; break;
-        }
-        
-        if (compileCmd) {
-          compileResult = await runCommand(compileCmd, 15000); // 15s for compilation
-          if (compileResult.error) {
-            return {
-              output: compileResult.stdout,
-              error: `Compilation Error: ${compileResult.stderr || compileResult.error.message}`,
-              exitCode: 1,
-              cpuTime: compileResult.executionTime,
-              memory: 2048,
-              timeout: compileResult.timeout,
-              signal: compileResult.error.signal,
-              compileTime: compileResult.executionTime
-            };
+        if (hasCache) {
+          // Copy cached files to temp dir
+          const cachedFiles = fs.readdirSync(cacheDir);
+          cachedFiles.forEach(file => {
+            fs.copyFileSync(path.join(cacheDir, file), path.join(dir, file));
+          });
+          compileResult.isFromCache = true;
+          console.log(`   - Cache Hit: ${cacheKey}`);
+        } else {
+          let compileCmd;
+          switch (languageStr) {
+            case "c": compileCmd = `cd ${dir} && gcc main.c -o main`; break;
+            case "cpp": compileCmd = `cd ${dir} && g++ main.cpp -o main`; break;
+            case "java": compileCmd = `cd ${dir} && javac Main.java`; break;
+            case "typescript":
+            case "ts": compileCmd = `cd ${dir} && tsc main.ts --esModuleInterop --skipLibCheck`; break;
+          }
+          
+          if (compileCmd) {
+            compileResult = await runCommand(compileCmd, 30000); // 30s for compilation
+            if (compileResult.error) {
+              return {
+                output: compileResult.stdout,
+                error: `Compilation Error: ${compileResult.stderr || compileResult.error.message}`,
+                exitCode: 1,
+                cpuTime: compileResult.executionTime,
+                memory: 2048,
+                timeout: compileResult.timeout,
+                signal: compileResult.error.signal,
+                compileTime: compileResult.executionTime
+              };
+            }
+            
+            // On success, save to cache
+            fs.mkdirSync(cacheDir, { recursive: true });
+            const outputFiles = {
+              "c": ["main"],
+              "cpp": ["main"],
+              "java": ["Main.class"], // Could be multiple, but Main is standard
+              "typescript": ["main.js"],
+              "ts": ["main.js"]
+            }[languageStr] || [];
+            
+            // For Java, it might generate anonymous classes (Main$1.class), so we catch all .class
+            if (languageStr === "java") {
+              const files = fs.readdirSync(dir).filter(f => f.endsWith('.class'));
+              files.forEach(f => fs.copyFileSync(path.join(dir, f), path.join(cacheDir, f)));
+            } else {
+              outputFiles.forEach(f => {
+                if (fs.existsSync(path.join(dir, f))) {
+                  fs.copyFileSync(path.join(dir, f), path.join(cacheDir, f));
+                }
+              });
+            }
           }
         }
       }
@@ -221,14 +266,21 @@ const runCode = (language, code, input, id) => {
         case "javascript":
         case "js": executionCmd = `cd ${dir} && node main.js ${input ? "< input.txt" : ""}`; break;
         case "typescript":
-        case "ts": executionCmd = `cd ${dir} && ts-node main.ts ${input ? "< input.txt" : ""}`; break;
+        case "ts": 
+          // If we compiled to main.js, we can run it with node instead of ts-node (MUCH faster)
+          if (fs.existsSync(`${dir}/main.js`)) {
+            executionCmd = `cd ${dir} && node main.js ${input ? "< input.txt" : ""}`;
+          } else {
+            executionCmd = `cd ${dir} && ts-node main.ts ${input ? "< input.txt" : ""}`; 
+          }
+          break;
         case "sql":
         case "sqlite": executionCmd = `cd ${dir} && sqlite3 main.db < main.sql`; break;
       }
 
       runResult = await runCommand(executionCmd, 10000); // 10s for execution
 
-      // Clean up
+      // Clean up temp
       try {
         if (fs.rmSync) fs.rmSync(dir, { recursive: true, force: true });
         else fs.rmdirSync(dir, { recursive: true });
@@ -249,7 +301,7 @@ const runCode = (language, code, input, id) => {
         memory: 2048,
         timeout: runResult.timeout,
         signal: runResult.error ? runResult.error.signal : null,
-        compileTime: compileResult.executionTime || null
+        compileTime: compileResult.isFromCache ? 0 : (compileResult.executionTime || null)
       };
     };
 
