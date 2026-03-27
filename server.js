@@ -246,6 +246,15 @@ app.post("/run", async (req, res) => {
     console.log(`   - Language: ${languageStr}`);
     
     const result = await runCode(language, sourceCode, input || "", id);
+
+    console.log(`   - Output: ${result.output}`);
+    console.log(`   - Error: ${result.error}`);
+    console.log(`   - Exit Code: ${result.exitCode}`);
+    console.log(`   - CPU Time: ${result.cpuTime}`);
+    console.log(`   - Memory: ${result.memory}`);
+    console.log(`   - Timeout: ${result.timeout}`);
+    console.log(`   - Signal: ${result.signal}`);
+    console.log(`   - Compile Time: ${result.compileTime}`);
     
     res.json(result);
   } catch (err) {
