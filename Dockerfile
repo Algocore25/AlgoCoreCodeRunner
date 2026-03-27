@@ -5,19 +5,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install all required language runtimes and tools
 RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get update && apt-get install -y \
     gcc \
     g++ \
-    build-essential \
     python3 \
     python3-pip \
-    python-is-python3 \
     openjdk-17-jdk \
     nodejs \
+    npm \
     sqlite3 \
+    curl \
     wget \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
