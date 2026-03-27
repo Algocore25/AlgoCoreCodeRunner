@@ -9,9 +9,10 @@ const app = express();
 const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || 3000;
 
 
-// Enable CORS for all origins
-app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: '10mb' }));
+// Enable CORS for all origins with full support for methods and headers
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve frontend dashboard correctly
 app.use(express.static("public"));
@@ -130,47 +131,101 @@ const runCode = (language, code, input, id) => {
         throw new Error(`Unsupported language: ${language}`);
     }
 
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      exec(cmd, { 
-        timeout: 10000, // 10 second timeout
-        cwd: process.cwd()
-      }, (error, stdout, stderr) => {
-        const endTime = Date.now();
-        const executionTime = endTime - startTime;
-
-        // Clean up temp directory
-        try {
-          if (fs.rmSync) {
-            fs.rmSync(dir, { recursive: true, force: true });
-          } else {
-            fs.rmdirSync(dir, { recursive: true });
-          }
-        } catch (cleanupError) {
-          console.error('Cleanup error:', cleanupError);
-        }
-
-        const errStr = stderr || (error && error.message) || "";
-        const outStr = stdout || "";
-
-        let errorMsg = null;
-        if (error || errStr) {
-          errorMsg = errStr.trim();
-          if (errorMsg === "") errorMsg = "Unknown Error";
-        }
-
-        resolve({
-          output: outStr,
-          error: errorMsg,
-          exitCode: error ? 1 : 0,
-          cpuTime: executionTime,
-          memory: 2048,
-          timeout: error ? (Boolean(error.killed) || executionTime >= 10000) : false,
-          signal: error ? error.signal : null,
-          compileTime: ["c", "cpp", "java", "typescript", "ts"].includes(languageStr) ? 45 : null
+    const runCommand = (cmd, timeoutMs = 15000) => {
+      return new Promise((resolve) => {
+        const startTime = Date.now();
+        exec(cmd, { 
+          timeout: timeoutMs,
+          cwd: process.cwd(),
+          maxBuffer: 1024 * 1024 * 10 // 10MB buffer
+        }, (error, stdout, stderr) => {
+          const executionTime = Date.now() - startTime;
+          resolve({
+            stdout: stdout || "",
+            stderr: stderr || "",
+            error: error,
+            executionTime,
+            timeout: error ? (Boolean(error.killed) || executionTime >= timeoutMs) : false
+          });
         });
       });
-    });
+    };
+
+    const execute = async () => {
+      let compileResult = { executionTime: 0 };
+      let runResult = { stdout: "", stderr: "", executionTime: 0, timeout: false, error: null };
+
+      // Compilation Step
+      if (["c", "cpp", "java", "typescript", "ts"].includes(languageStr)) {
+        let compileCmd;
+        switch (languageStr) {
+          case "c": compileCmd = `cd ${dir} && gcc main.c -o main`; break;
+          case "cpp": compileCmd = `cd ${dir} && g++ main.cpp -o main`; break;
+          case "java": compileCmd = `cd ${dir} && javac Main.java`; break;
+          case "typescript":
+          case "ts": compileCmd = `cd ${dir} && tsc main.ts --esModuleInterop --skipLibCheck`; break;
+        }
+        
+        if (compileCmd) {
+          compileResult = await runCommand(compileCmd, 15000); // 15s for compilation
+          if (compileResult.error) {
+            return {
+              output: compileResult.stdout,
+              error: `Compilation Error: ${compileResult.stderr || compileResult.error.message}`,
+              exitCode: 1,
+              cpuTime: compileResult.executionTime,
+              memory: 2048,
+              timeout: compileResult.timeout,
+              signal: compileResult.error.signal,
+              compileTime: compileResult.executionTime
+            };
+          }
+        }
+      }
+
+      // Execution Step
+      let executionCmd;
+      switch (languageStr) {
+        case "python": executionCmd = `cd ${dir} && python3 main.py ${input ? "< input.txt" : ""}`; break;
+        case "c":
+        case "cpp": executionCmd = `cd ${dir} && ./main ${input ? "< input.txt" : ""}`; break;
+        case "java": executionCmd = `cd ${dir} && java Main ${input ? "< input.txt" : ""}`; break;
+        case "javascript":
+        case "js": executionCmd = `cd ${dir} && node main.js ${input ? "< input.txt" : ""}`; break;
+        case "typescript":
+        case "ts": executionCmd = `cd ${dir} && ts-node main.ts ${input ? "< input.txt" : ""}`; break;
+        case "sql":
+        case "sqlite": executionCmd = `cd ${dir} && sqlite3 main.db < main.sql`; break;
+      }
+
+      runResult = await runCommand(executionCmd, 10000); // 10s for execution
+
+      // Clean up
+      try {
+        if (fs.rmSync) fs.rmSync(dir, { recursive: true, force: true });
+        else fs.rmdirSync(dir, { recursive: true });
+      } catch (e) { console.error('Cleanup error:', e); }
+
+      const errStr = runResult.stderr || (runResult.error && runResult.error.message) || "";
+      let errorMsg = null;
+      if (runResult.error || errStr) {
+        errorMsg = errStr.trim();
+        if (errorMsg === "") errorMsg = "Execution Error";
+      }
+
+      return {
+        output: runResult.stdout,
+        error: errorMsg,
+        exitCode: runResult.error ? 1 : 0,
+        cpuTime: runResult.executionTime,
+        memory: 2048,
+        timeout: runResult.timeout,
+        signal: runResult.error ? runResult.error.signal : null,
+        compileTime: compileResult.executionTime || null
+      };
+    };
+
+    return execute();
   } catch (error) {
     // Clean up on error
     try {
@@ -283,5 +338,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Code Runner Server running on port ${PORT}`);
   console.log(`📝 Supported languages: C(1), C++(2), Java(3), Python(4), JavaScript(5), TypeScript(6), SQL(7)`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`🌐 CORS enabled for all origins`);
+  console.log(`🌐 CORS enabled for all origins (Public API Mode)`);
 });
