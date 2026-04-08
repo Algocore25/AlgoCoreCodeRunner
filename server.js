@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import { exec } from "child_process";
@@ -5,6 +8,8 @@ import fs from "fs";
 import { v4 as uuid } from "uuid";
 import path from "path";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
+import { runAI, runChat } from "./ai-models.js";
 
 const app = express();
 const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || 3000;
@@ -408,6 +413,192 @@ app.post("/run", async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// EMAIL SERVICE — Transporter pooling with fallback accounts
+// ═══════════════════════════════════════════════════════════════
+const transporters = {};
+
+function getTransporter(account) {
+  if (!transporters[account.user]) {
+    transporters[account.user] = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 50,
+      auth: {
+        user: account.user,
+        pass: account.pass
+      }
+    });
+  }
+  return transporters[account.user];
+}
+
+app.post('/send-email', async (req, res) => {
+  const { to, subject, text, html } = req.body;
+
+  if (!to || !subject || (!text && !html)) {
+    return res.status(400).json({ error: 'Missing required fields: to, subject, and text/html' });
+  }
+
+  const accounts = [
+    { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    { user: process.env.EMAIL_USER2, pass: process.env.EMAIL_PASS2 }
+  ].filter(acc => acc.user && acc.pass);
+
+  let lastError = null;
+  for (let i = 0; i < accounts.length; i++) {
+    const account = accounts[i];
+    try {
+      console.log(`📧 Attempting to send email via account ${i + 1}: ${account.user}`);
+      const transporter = getTransporter(account);
+
+      const mailOptions = {
+        from: account.user,
+        to,
+        subject,
+        text,
+        html
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email successfully sent via ${account.user}:`, info.response);
+
+      // Check if email was actually accepted or blocked/rejected
+      const responseText = (info.response || "").toLowerCase();
+      const isBlocked = responseText.includes("blocked") ||
+        responseText.includes("limit") ||
+        responseText.includes("quota") ||
+        responseText.includes("reached");
+
+      if (info.rejected.length > 0 || isBlocked) {
+        console.warn(`⚠️ Email via ${account.user} was rejected or blocked: ${info.response}`);
+        throw new Error(`Email rejected/blocked: ${info.response}`);
+      }
+
+      return res.status(200).json({
+        message: 'Email sent successfully',
+        info: info.response,
+        sentVia: account.user
+      });
+    } catch (error) {
+      console.error(`❌ Account ${i + 1} (${account.user}) failed:`, error.message);
+      lastError = error;
+
+      if (i < accounts.length - 1) {
+        console.log(`🔄 Switching to next available account...`);
+      } else {
+        console.error(`❌ All ${accounts.length} accounts have failed.`);
+      }
+    }
+  }
+
+  // All accounts failed
+  res.status(500).json({
+    error: 'All email accounts failed to send',
+    message: lastError ? lastError.message : 'Unknown error',
+    details: lastError
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AI PROCESSING ROUTE
+// ═══════════════════════════════════════════════════════════════
+app.post('/ai', async (req, res) => {
+  const { task, text, model, options } = req.body;
+
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    console.log(`🤖 AI Request: Task=${task || 'summarization'}, Model=${model || 'default'}`);
+
+    const defaultModels = {
+      'summarization': 'llama-3.1-8b-instant',
+      'text-generation': 'llama-3.3-70b-versatile'
+    };
+
+    const selectedTask = task || 'summarization';
+    const selectedModel = model || defaultModels[selectedTask];
+
+    if (!selectedModel) {
+      return res.status(400).json({ error: `No default model found for task: ${selectedTask}. Please specify a model.` });
+    }
+
+    const result = await runAI(selectedTask, selectedModel, text, options || {});
+
+    res.status(200).json({
+      success: true,
+      task: selectedTask,
+      model: selectedModel,
+      result: typeof result === 'string' ? result : JSON.stringify(result)
+    });
+  } catch (error) {
+    console.error('❌ AI Processing Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AI CHAT ROUTES — General + Specialized
+// ═══════════════════════════════════════════════════════════════
+async function handleChatRequest(req, res, specializedPrompt) {
+  const { messages, text, model } = req.body;
+
+  // Support both single "text" or full "messages" array
+  let inputMessages = messages;
+  if (!inputMessages && text) {
+    inputMessages = [{ role: 'user', content: text }];
+  }
+
+  if (!inputMessages || !Array.isArray(inputMessages)) {
+    return res.status(400).json({ error: 'Messages array or text is required' });
+  }
+
+  try {
+    const chatModel = model || 'llama-3.3-70b-versatile';
+
+    // Ensure specialized system prompt is first
+    if (inputMessages.length === 0 || inputMessages[0].role !== 'system') {
+      inputMessages.unshift({ role: 'system', content: specializedPrompt });
+    }
+
+    const response = await runChat(chatModel, inputMessages, {
+      max_tokens: 1024,
+      temperature: 0.6
+    });
+
+    res.status(200).json({ success: true, response, model: chatModel });
+  } catch (error) {
+    console.error('❌ Chat Route Error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+}
+
+// 1. General Chat
+app.post('/chat', (req, res) => {
+  handleChatRequest(req, res, "You are a helpful AI assistant.");
+});
+
+// 2. Aptitude Solving
+app.post('/aptitude/solve', (req, res) => {
+  handleChatRequest(req, res, "You are an aptitude and logical reasoning expert. Solve the user's question step-by-step with clear logic, formulas, and a final answer.");
+});
+
+// 3. Coding Evaluation
+app.post('/coding/evaluate', (req, res) => {
+  handleChatRequest(req, res, "You are an expert code reviewer. Evaluate the provided code for correctness, edge cases, and best practices. Suggest improvements if necessary.");
+});
+
+// 4. Complexity Analysis
+app.post('/coding/complexity', (req, res) => {
+  handleChatRequest(req, res, "You are an algorithm specialist. Analyze the time and space complexity (Big O notation) of the provided code. Explain your reasoning clearly.");
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
@@ -418,6 +609,8 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Code Runner Server running on port ${PORT}`);
   console.log(`📝 Supported languages: C(1), C++(2), Java(3), Python(4), JavaScript(5), TypeScript(6), SQL(7)`);
+  console.log(`📧 Email service: ${process.env.EMAIL_SERVICE || 'gmail'}`);
+  console.log(`🤖 AI routes: /ai, /chat, /aptitude/solve, /coding/evaluate, /coding/complexity`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 CORS enabled for all origins (Public API Mode)`);
 });
