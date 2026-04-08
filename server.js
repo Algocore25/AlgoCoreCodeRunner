@@ -12,7 +12,7 @@ import nodemailer from "nodemailer";
 import { runAI, runChat } from "./ai-models.js";
 
 const app = express();
-const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env['port'] || 3000;
+const PORT = process.env.FUNCTIONS_HTTPWORKER_PORT || process.env.PORT || process.env['port'] || 3000;
 
 
 // Enable CORS for all origins with full support for methods and headers
@@ -421,7 +421,7 @@ const transporters = {};
 function getTransporter(account) {
   if (!transporters[account.user]) {
     transporters[account.user] = nodemailer.createTransport({
-      service: process.env['email-service'] || 'gmail',
+      service: process.env.EMAIL_SERVICE || process.env['email-service'] || 'gmail',
       pool: true,
       maxConnections: 1,
       maxMessages: 50,
@@ -442,8 +442,8 @@ app.post('/send-email', async (req, res) => {
   }
 
   const accounts = [
-    { user: process.env['email-user'], pass: process.env['email-pass'] },
-    { user: process.env['email-user2'], pass: process.env['email-pass2'] }
+    { user: process.env.EMAIL_USER || process.env['email-user'], pass: process.env.EMAIL_PASS || process.env['email-pass'] },
+    { user: process.env.EMAIL_USER2 || process.env['email-user2'], pass: process.env.EMAIL_PASS2 || process.env['email-pass2'] }
   ].filter(acc => acc.user && acc.pass);
 
   let lastError = null;
@@ -609,7 +609,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Code Runner Server running on port ${PORT}`);
   console.log(`📝 Supported languages: C(1), C++(2), Java(3), Python(4), JavaScript(5), TypeScript(6), SQL(7)`);
-  console.log(`📧 Email service: ${process.env['email-service'] || 'gmail'}`);
+  console.log(`📧 Email service: ${process.env.EMAIL_SERVICE || process.env['email-service'] || 'gmail'}`);
   console.log(`🤖 AI routes: /ai, /chat, /aptitude-solve, /coding-evaluate, /coding-complexity`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 CORS enabled for all origins (Public API Mode)`);

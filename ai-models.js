@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const groq = new Groq({
-    apiKey: process.env['groq-api-key'],
+    apiKey: process.env.GROQ_API_KEY || process.env['groq-api-key'],
 });
 
 /**
