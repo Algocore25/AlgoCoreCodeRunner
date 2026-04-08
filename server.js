@@ -20,6 +20,19 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// ═══════════════════════════════════════════════════════════════
+// GLOBAL REQUEST LOGGER
+// ═══════════════════════════════════════════════════════════════
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`\n[${timestamp}] ${req.method} ${req.url}`);
+  console.log(`Type: ${req.headers['content-type'] || 'None'}`);
+  if (Object.keys(req.body || {}).length > 0) {
+    console.log(`Body:`, JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
+
 // Serve frontend dashboard correctly
 app.use(express.static("public"));
 
