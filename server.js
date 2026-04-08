@@ -454,10 +454,20 @@ app.post('/send-email', async (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: to, subject, and text/html' });
   }
 
-  const accounts = [
+  const rawAccounts = [
     { user: process.env.EMAIL_USER || process.env['email-user'], pass: process.env.EMAIL_PASS || process.env['email-pass'] },
     { user: process.env.EMAIL_USER2 || process.env['email-user2'], pass: process.env.EMAIL_PASS2 || process.env['email-pass2'] }
-  ].filter(acc => acc.user && acc.pass);
+  ];
+
+  // Explicitly handle the condition if email-user3 is present or missing
+  if (process.env.EMAIL_USER3 || process.env['email-user3']) {
+    rawAccounts.push({
+      user: process.env.EMAIL_USER3 || process.env['email-user3'],
+      pass: process.env.EMAIL_PASS3 || process.env['email-pass3']
+    });
+  }
+
+  const accounts = rawAccounts.filter(acc => acc.user && acc.pass);
 
   let lastError = null;
   for (let i = 0; i < accounts.length; i++) {
