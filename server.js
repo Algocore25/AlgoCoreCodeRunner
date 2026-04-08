@@ -585,17 +585,17 @@ app.post('/chat', (req, res) => {
 });
 
 // 2. Aptitude Solving
-app.post('/aptitude/solve', (req, res) => {
+app.post('/aptitude-solve', (req, res) => {
   handleChatRequest(req, res, "You are an aptitude and logical reasoning expert. Solve the user's question step-by-step with clear logic, formulas, and a final answer.");
 });
 
 // 3. Coding Evaluation
-app.post('/coding/evaluate', (req, res) => {
+app.post('/coding-evaluate', (req, res) => {
   handleChatRequest(req, res, "You are an expert code reviewer. Evaluate the provided code for correctness, edge cases, and best practices. Suggest improvements if necessary.");
 });
 
 // 4. Complexity Analysis
-app.post('/coding/complexity', (req, res) => {
+app.post('/coding-complexity', (req, res) => {
   handleChatRequest(req, res, "You are an algorithm specialist. Analyze the time and space complexity (Big O notation) of the provided code. Explain your reasoning clearly.");
 });
 
@@ -610,7 +610,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Code Runner Server running on port ${PORT}`);
   console.log(`📝 Supported languages: C(1), C++(2), Java(3), Python(4), JavaScript(5), TypeScript(6), SQL(7)`);
   console.log(`📧 Email service: ${process.env.EMAIL_SERVICE || 'gmail'}`);
-  console.log(`🤖 AI routes: /ai, /chat, /aptitude/solve, /coding/evaluate, /coding/complexity`);
+  console.log(`🤖 AI routes: /ai, /chat, /aptitude-solve, /coding-evaluate, /coding-complexity`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
   console.log(`🌐 CORS enabled for all origins (Public API Mode)`);
 });
