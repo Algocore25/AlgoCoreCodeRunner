@@ -30,7 +30,8 @@ export async function runAI(task, modelName, input, options = {}) {
             max_tokens: options.max_new_tokens || 1024,
         });
 
-        return chatCompletion.choices[0]?.message?.content || "";
+        const choice = chatCompletion.choices && chatCompletion.choices[0];
+        return (choice && choice.message && choice.message.content) || "";
     } catch (error) {
         console.error(`❌ Groq API Error (${task}):`, error.message);
         throw error;
@@ -53,7 +54,8 @@ export async function runChat(modelName, messages, options = {}) {
             stream: false,
         });
 
-        return chatCompletion.choices[0]?.message?.content || "";
+        const choice = chatCompletion.choices && chatCompletion.choices[0];
+        return (choice && choice.message && choice.message.content) || "";
     } catch (error) {
         console.error(`❌ Groq Chat Error:`, error.message);
         throw error;
